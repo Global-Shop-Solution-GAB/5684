@@ -1,0 +1,228 @@
+Program.Sub.ScreenSU.Start
+Gui.FmDates..Create
+Gui.FmDates..Caption("Please select date range")
+Gui.FmDates..Size(4440,2160)
+Gui.FmDates..MinX(0)
+Gui.FmDates..MinY(0)
+Gui.FmDates..Position(0,0)
+Gui.FmDates..BackColor(-2147483633)
+Gui.FmDates..MousePointer(0)
+Gui.FmDates..Event(UnLoad,FmDates_UnLoad)
+Gui.FmDates.dtpStart.Create(DatePicker)
+Gui.FmDates.dtpStart.Size(1935,285)
+Gui.FmDates.dtpStart.Position(1560,120)
+Gui.FmDates.dtpEnd.Create(DatePicker)
+Gui.FmDates.dtpEnd.Size(1935,285)
+Gui.FmDates.dtpEnd.Position(1560,660)
+Gui.FmDates.lblStart.Create(Label,"Start Date",True,885,255,0,555,210,True,0,"Arial",8,-2147483633,0)
+Gui.FmDates.lblEnd.Create(Label,"End Date",True,915,255,0,555,750,True,0,"Arial",8,-2147483633,0)
+Gui.FmDates.cmdPrnt.Create(Button)
+Gui.FmDates.cmdPrnt.Size(855,375)
+Gui.FmDates.cmdPrnt.Position(2640,1080)
+Gui.FmDates.cmdPrnt.Caption("Print")
+Gui.FmDates.cmdPrnt.Event(Click,cmdPrnt_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+
+'F.Intrinsic.Debug.BenchmarkModeEnable
+
+Gui.FmDates..Show
+
+f.Intrinsic.Control.Catch
+	f.Intrinsic.String.Build("({5}-{6})-Project: {4} Sub: {1} Error: {2}, {3}{0}", V.Ambient.NewLine, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription,V.Caller.ScriptFile,V.Ambient.Date, V.Ambient.Time,V.Local.sError)
+	f.Intrinsic.Control.CallSub(Error, "Arg0", V.Local.sError)
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.cmdPrnt_Click.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+V.Local.iRet.Declare
+
+F.Intrinsic.Control.If(V.Screen.FmDates!dtpStart.Value,>,V.Screen.FmDates!dtpEnd.Value)
+	F.Intrinsic.UI.Msgbox("Please enter a valid date range","Invalid date range specified",V.Local.iRet)
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.CallSub(Data)
+
+f.Intrinsic.Control.Catch
+	f.Intrinsic.String.Build("({5}-{6})-Project: {4} Sub: {1} Error: {2}, {3}{0}", V.Ambient.NewLine, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription,V.Caller.ScriptFile,V.Ambient.Date, V.Ambient.Time,V.Local.sError)
+	f.Intrinsic.Control.CallSub(Error, "Arg0", V.Local.sError)
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdPrnt_Click.End
+
+Program.Sub.Data.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+V.Local.sDateStart.Declare
+V.Local.sDateEnd.Declare
+V.Local.sSQL.Declare
+V.Local.sMonths.Declare
+V.Local.sJOBS.Declare
+
+F.Intrinsic.UI.InvokeWaitDialog("Gathering current job data","Please wait")
+
+F.Intrinsic.String.Format(V.Screen.FmDates!dtpStart.Value,"YYYY-MM-DD",V.Local.sDateStart)
+F.Intrinsic.String.Format(V.Screen.FmDates!dtpEnd.Value,"YYYY-MM-DD",V.Local.sDateEnd)
+
+'V.Local.sMonths.Set("('JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC')")
+
+F.ODBC.Connection!conts.OpenCompanyConnection(500)
+'Collect Job Header data
+F.Intrinsic.String.Build("SELECT RTRIM(JOB) as JOB, RTRIM(SUFFIX) as SUFFIX,PART AS H_PART, CUSTOMER, CUSTOMER as NAME_CUSTOMER, CUSTOMER_PO, PART_CUSTOMER, DRAWING_CUSTOMER,ROUTER, DESCRIPTION AS H_DESCRIPTION, LOCATION, CODE_SORT, DATE_OPENED, DATE_DUE AS H_DATE_DUE, DATE_CLOSED,QTY_COMPLETED, QTY_ORDER,QTY_SHIP_1,QTY_SHIP_2,QTY_SHIP_3,QTY_SHIP_4 FROM V_JOB_HEADER WHERE DATE_CLOSED BETWEEN '{0}' AND '{1}' and SUFFIX <= '950';", V.Local.sDateStart,V.Local.sDateEnd,V.Local.sSQL)
+
+F.Data.DataTable.CreateFromSQL("dtHeader","conts",V.Local.sSQL,True)
+F.Data.DataTable.AddExpressionColumn("dtHeader","JS","String","JOB+SUFFIX")
+
+F.Data.Dictionary.CreateFromSQL("dictCust","conts","select CUSTOMER, NAME_CUSTOMER from V_CUSTOMER_MASTER")
+F.Data.Dictionary.SetDefaultReturn("dictCust","")
+F.Data.DataTable.FillFromDictionary("dtHeader","dictCust","CUSTOMER","NAME_CUSTOMER")
+
+F.Data.DataView.Create("dtHeader","dvHeader",22)
+F.Data.DataView.ToString("dtHeader","dvHeader","JS","NODELIMITER","','",V.Local.sJOBS)
+F.Data.DataView.Close("dtHeader","dvHeader")
+
+'Collect Job Operations data
+F.Intrinsic.String.Build("SELECT RTRIM(JOB) as JOB, RTRIM(SUFFIX) as SUFFIX, SEQ, LMO, RTRIM(PART) as PART, DESCRIPTION, FLAG_CLOSED, DATE_DUE, DATE_COMPLETED, UM, HOURS_ESTIMATED, HOURS_ACTUAL, DOLLARS_ESTIMATED, DOLLARS_ACTUAL FROM V_JOB_OPERATIONS WHERE LMO NOT IN ('C','Z') AND JOB+SUFFIX in ('{0}')",V.Local.sJOBS,V.Local.sSQL)
+
+F.Data.DataTable.CreateFromSQL("dtOps","conts",V.Local.sSQL,True)
+F.Data.DataTable.AddExpressionColumn("dtOps","JSS","String","JOB+SUFFIX+SEQ")
+F.Data.DataTable.AddColumn("dtOps","WC","String")
+
+'Collect WC from V_JOB_DETAIL
+F.Intrinsic.String.Build("select RTRIM(JOB)+RTRIM(SUFFIX)+RTRIM(SEQ) as JSS,DEPT_WORKCENTER from V_JOB_DETAIL","",V.Local.sSQL)
+F.Data.Dictionary.CreateFromSQL("dictWC","conts",V.Local.sSQL)
+F.Data.Dictionary.SetDefaultReturn("dictWC","")
+F.Data.DataTable.FillFromDictionary("dtOps","dictWC","JSS","WC")
+F.Data.DataTable.RemoveColumn("dtOps","JSS")
+
+F.Intrinsic.UI.ChangeWaitStatus("Gathering job history data",-1)
+
+'Collect History Job Header Data
+F.Intrinsic.String.Build("SELECT RTRIM(JOB) as JOB, RTRIM(SUFFIX) as SUFFIX,PART AS H_PART, CUSTOMER, CUSTOMER as NAME_CUSTOMER, CUSTOMER_PO, PART_CUSTOMER, DRAWING_CUSTOMER,ROUTER, DESCRIPTION AS H_DESCRIPTION, LOCATION, CODE_SORT, DATE_OPENED, DATE_DUE AS H_DATE_DUE, DATE_CLOSED,QTY_COMPLETED, QTY_ORDER,QTY_SHIP_1,QTY_SHIP_2,QTY_SHIP_3,QTY_SHIP_4 FROM V_JOB_HIST_MAST WHERE DATE_CLOSED BETWEEN '{0}' AND '{1}' and SUFFIX <= '950';", V.Local.sDateStart,V.Local.sDateEnd,V.Local.sSQL)
+
+F.Data.DataTable.CreateFromSQL("dtHistHead","conts",V.Local.sSQL)
+F.Data.DataTable.AddExpressionColumn("dtHistHead","JS","String","JOB+SUFFIX")
+
+F.Data.DataTable.FillFromDictionary("dtHistHead","dictCust","CUSTOMER","NAME_CUSTOMER")
+F.Data.Dictionary.Close("dictCust")
+
+F.Data.DataView.Create("dtHistHead","dvHistHead",22)
+F.Data.DataView.ToString("dtHistHead","dvHistHead","JS","NODELIMITER","','",V.Local.sJOBS)
+F.Data.DataView.Close("dtHistHead","dvHistHead")
+
+'Collect History Operations 
+F.Intrinsic.String.Build("SELECT RTRIM(JOB) as JOB, RTRIM(SUFFIX) as SUFFIX, SEQ, LMO, RTRIM(PART) as PART, DESCRIPTION, FLAG_CLOSED, DATE_DUE, DATE_COMPLETED, UM, HOURS_ESTIMATED, HOURS_ACTUAL, DOLLARS_ESTIMATED, DOLLARS_ACTUAL FROM V_JOB_HIST_OPS WHERE LMO NOT IN ('C','Z') AND JOB+SUFFIX in ('{0}')",V.Local.sJOBS,V.Local.sSQL)
+
+F.Data.DataTable.CreateFromSQL("dtHistOps","conts",V.Local.sSQL,True)
+F.Data.DataTable.AddExpressionColumn("dtHistOps","JSS","String","JOB+SUFFIX+SEQ")
+F.Data.DataTable.AddColumn("dtHistOps","WC","String")
+
+'Collect WC from V_JOB_HIST_DTL
+F.Intrinsic.String.Build("select RTRIM(JOB)+RTRIM(SUFFIX)+RTRIM(SEQ) as JSS,DEPARTMENT from V_JOB_HIST_DTL","",V.Local.sSQL)
+F.Data.Dictionary.CreateFromSQL("dictHistWC","conts",V.Local.sSQL)
+F.Data.Dictionary.SetDefaultReturn("dictHistWC","")
+F.Data.DataTable.FillFromDictionary("dtHistOps","dictWC","JSS","WC")
+F.Data.DataTable.RemoveColumn("dtHistOps","JSS")
+
+'Linq current data
+F.Data.Linq.Join("Leftjoin","Datatable","dtHeader*!*H","Datatable","dtOps*!*O","O.JOB=H.JOB AND O.SUFFIX=H.SUFFIX","H.JOB*!*H.SUFFIX*!*H.H_PART*!*H.CUSTOMER*!*H.NAME_CUSTOMER*!*H.CUSTOMER_PO*!*H.PART_CUSTOMER*!*H.DRAWING_CUSTOMER*!*H.ROUTER*!*H.H_DESCRIPTION*!*H.LOCATION*!*H.CODE_SORT*!*H.DATE_OPENED*!*H.H_DATE_DUE*!*H.DATE_CLOSED*!*H.QTY_COMPLETED*!*H.QTY_ORDER*!*H.QTY_SHIP_1*!*H.QTY_SHIP_2*!*H.QTY_SHIP_3*!*H.QTY_SHIP_4*!*O.SEQ*!*O.LMO*!*O.PART*!*O.DESCRIPTION*!*O.FLAG_CLOSED*!* O.DATE_DUE*!*O.DATE_COMPLETED*!*O.UM*!*O.HOURS_ESTIMATED*!*O.HOURS_ACTUAL*!*O.DOLLARS_ESTIMATED*!*O.DOLLARS_ACTUAL*!*O.WC","","","H.JOB asc,H.SUFFIX asc,O.SEQ asc","dtHeadOpsJoin",True)
+
+'Linq history data
+F.Data.Linq.Join("Leftjoin","Datatable","dtHistHead*!*H","Datatable","dtHistOps*!*O","O.JOB=H.JOB AND O.SUFFIX=H.SUFFIX","H.JOB*!*H.SUFFIX*!*H.H_PART*!*H.CUSTOMER*!*H.NAME_CUSTOMER*!*H.CUSTOMER_PO*!*H.PART_CUSTOMER*!*H.DRAWING_CUSTOMER*!*H.ROUTER*!*H.H_DESCRIPTION*!*H.LOCATION*!*H.CODE_SORT*!*H.DATE_OPENED*!*H.H_DATE_DUE*!*H.DATE_CLOSED*!*H.QTY_COMPLETED*!*H.QTY_ORDER*!*H.QTY_SHIP_1*!*H.QTY_SHIP_2*!*H.QTY_SHIP_3*!*H.QTY_SHIP_4*!*O.SEQ*!*O.LMO*!*O.PART*!*O.DESCRIPTION*!*O.FLAG_CLOSED*!* O.DATE_DUE*!*O.DATE_COMPLETED*!*O.UM*!*O.HOURS_ESTIMATED*!*O.HOURS_ACTUAL*!*O.DOLLARS_ESTIMATED*!*O.DOLLARS_ACTUAL*!*O.WC","","","H.JOB asc,H.SUFFIX asc,O.SEQ asc","dtHistHeadOpsJoin",True)
+
+F.Intrinsic.UI.ChangeWaitStatus("Combining job data",-1)
+
+'Merge Datatables
+F.Data.DataTable.Merge("dtHistHeadOpsJoin","dtHeadOpsJoin",True,2)
+
+F.Data.DataTable.AddColumn("dtHeadOpsJoin","PRODUCT_LINE","String")
+F.Data.Dictionary.CreateFromSQL("dictPL","conts","select RTRIM(PART) as PART,PRODUCT_LINE from V_INVENTORY_MSTR")
+Function.Data.Dictionary.SetDefaultReturn("dictPL","")
+
+F.Data.DataTable.FillFromDictionary("dtHeadOpsJoin","dictPL","PART","PRODUCT_LINE")
+
+'Calculate percent change between HOURS_EST and HOURS_ACT
+F.Data.DataTable.AddExpressionColumn("dtHeadOpsJoin","HOURS_VAR1","Numeric","IIF(HOURS_ESTIMATED <= 0,0,HOURS_ACTUAL - HOURS_ESTIMATED)")
+F.Data.DataTable.AddExpressionColumn("dtHeadOpsJoin","HOURS_VAR2","Numeric","IIF(HOURS_VAR1 = 0,0,(HOURS_VAR1/HOURS_ESTIMATED)*100)")
+F.Data.DataTable.AddExpressionColumn("dtHeadOpsJoin","DOLLARS_VAR1","Numeric","(DOLLARS_ACTUAL - DOLLARS_ESTIMATED)")
+F.Data.DataTable.AddColumn("dtHeadOpsJoin","HOURS_VAR","String")
+F.Data.DataTable.AddColumn("dtHeadOpsJoin","DOLLARS_VAR","String")
+F.Data.DataTable.SetValueFormat("dtHeadOpsJoin",-1,"HOURS_VAR2","HOURS_VAR","#0.00")
+F.Data.DataTable.SetValueFormat("dtHeadOpsJoin",-1,"DOLLARS_VAR1","DOLLARS_VAR","#0.00")
+
+F.ODBC.Connection!conts.Close
+
+F.Intrinsic.Control.CallSub(RptBuild)
+
+f.Intrinsic.Control.Catch
+	f.Intrinsic.String.Build("({5}-{6})-Project: {4} Sub: {1} Error: {2}, {3}{0}", V.Ambient.NewLine, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription,V.Caller.ScriptFile,V.Ambient.Date, V.Ambient.Time,V.Local.sError)
+	f.Intrinsic.Control.CallSub(Error, "Arg0", V.Local.sError)
+F.Intrinsic.Control.EndTry
+Program.Sub.Data.End
+
+Program.Sub.RptBuild.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare
+V.Local.iRunID.Declare
+V.Local.iReportId.Declare
+V.Local.sReportId.Declare
+V.Local.iRet.Declare
+V.Local.iLog.Declare
+V.Local.sSQL.Declare
+
+F.Intrinsic.UI.ChangeWaitStatus("Calling Crystal Report",-1)
+
+F.ODBC.Connection!conts.OpenCompanyConnection
+
+F.Global.BI.GetRunID(V.Local.iRunID)
+F.Global.BI.GetIDFromName("GCG_5684_WO_COMP.rpt",V.Local.iReportId)
+V.Local.sReportId.Set(V.Local.iReportId)
+
+F.Global.BI.StartLogging(V.Local.iRunID,V.Local.iReportId,0,"GCG_5684_WO_COMP.rpt",V.Local.iLog)
+
+F.Data.DataTable.AddColumn("dtHeadOpsJoin","BIRUNID","String",V.Local.iRunID)
+F.Data.DataTable.AddColumn("dtHeadOpsJoin","TERMINAL","String",V.Caller.Terminal)
+
+F.Intrinsic.String.Build("delete GCG_5684_WO_COMP where TERMINAL = '{0}'",V.Caller.Terminal,V.Local.sSQL)
+
+F.ODBC.Connection!conts.Execute(V.Local.sSQL)
+
+F.Data.DataTable.SaveToDB("dtHeadOpsJoin","conts","GCG_5684_WO_COMP","BIRUNID*!*TERMINAL",128,"BIRUNID@!@BIRUNID*!*NAME_CUSTOMER@!@NAME_CUSTOMER*!*JOB@!@JOB*!*SUFFIX@!@SUFFIX*!*H_PART@!@H_PART*!*CUSTOMER@!@CUSTOMER*!*CUSTOMER_PO@!@CUSTOMER_PO*!*PART_CUSTOMER@!@PART_CUSTOMER*!*DRAWING_CUSTOMER@!@DRAWING_CUSTOMER*!*ROUTER@!@ROUTER*!*H_DESCRIPTION@!@H_DESCRIPTION*!*LOCATION@!@LOCATION*!*CODE_SORT@!@CODE_SORT*!*DATE_OPENED@!@DATE_OPENED*!*H_DATE_DUE@!@H_DATE_DUE*!*DATE_CLOSED@!@DATE_CLOSED*!*SEQ@!@SEQ*!*LMO@!@LMO*!*PART@!@PART*!*DESCRIPTION@!@DESCRIPTION*!*FLAG_CLOSED@!@FLAG_CLOSED*!*DATE_DUE@!@DATE_DUE*!*DATE_COMPLETED@!@DATE_COMPLETED*!*UM@!@UM*!*HOURS_ESTIMATED@!@HOURS_ESTIMATED*!*HOURS_ACTUAL@!@HOURS_ACTUAL*!*HOURS_VAR@!@HOURS_VAR*!*DOLLARS_ESTIMATED@!@DOLLARS_ESTIMATED*!*DOLLARS_ACTUAL@!@DOLLARS_ACTUAL*!*DOLLARS_VAR@!@DOLLARS_VAR*!*QTY_ORDER@!@QTY_ORDER*!*QTY_COMPLETED@!@QTY_COMPLETED*!*QTY_SHIP_1@!@WIP_1*!*QTY_SHIP_2@!@WIP_2*!*QTY_SHIP_3@!@WIP_3*!*QTY_SHIP_4@!@WIP_4*!*WC@!@WC*!*PRODUCT_LINE@!@PRODUCT_LINE*!*TERMINAL@!@TERMINAL")
+
+F.ODBC.Connection!conts.Close
+
+F.Intrinsic.UI.CloseWaitDialog
+
+F.Global.BI.StopLogging(V.Local.iLog)
+F.Global.BI.RunReportPreProcessor(V.Local.iRunID,V.Local.iLog,"TERMINAL",V.Caller.Terminal.Trim,"",-1,False,"",-1,"",-1,"","",V.Local.iRet)
+
+F.Intrinsic.Control.CallSub(FmDates_UnLoad)
+
+f.Intrinsic.Control.Catch
+	f.Intrinsic.String.Build("({5}-{6})-Project: {4} Sub: {1} Error: {2}, {3}{0}", V.Ambient.NewLine, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription,V.Caller.ScriptFile,V.Ambient.Date, V.Ambient.Time,V.Local.sError)
+	f.Intrinsic.Control.CallSub(Error, "Arg0", V.Local.sError)
+F.Intrinsic.Control.EndTry
+Program.Sub.RptBuild.End
+
+Program.Sub.Error.Start
+V.Local.iRet.Declare
+f.Intrinsic.UI.Msgbox(V.Args.Arg0,"An Error Occurred",V.Local.iRet)
+F.Intrinsic.Control.CallSub(FmDates_UnLoad)
+Program.Sub.Error.End
+
+Program.Sub.FmDates_UnLoad.Start
+F.Intrinsic.Control.End
+
+Program.Sub.FmDates_UnLoad.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$$}$12:00:00 AM$}$False
+Program.Sub.Comments.End
